@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Stock CAGR Calculator App</title>
+
+<!-- ✅ PWA Manifest + Theme -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1a73e8">
+
+<style>
+  body {
+    font-family: Arial;
+    background: #f4f6fb;
+    padding: 20px;
+  }
+
+  .box {
+    max-width: 900px;
+    margin: auto;
+    background: white;
+    padding: 25px;
+    border-radius: 15px;
+    box-shadow: 0px 0px 12px rgba(0,0,0,0.15);
+  }
+
+  h2 {
+    text-align: center;
+    margin-bottom: 20px;
+  }
+
+  label {
+    font-weight: bold;
+    margin-top: 14px;
+    display: block;
+  }
+
+  input {
+    width: 100%;
+    padding: 12px;
+    margin-top: 6px;
+    border-radius: 10px;
+    border: 1px solid #bbb;
+    font-size: 16px;
+  }
+
+  .result {
+    margin-top: 20px;
+    padding: 18px;
+    border-radius: 12px;
+    font-size: 18px;
+    background: #eef;
+    text-align: center;
+    line-height: 1.6;
+  }
+
+  canvas {
+    margin-top: 20px;
+    width: 100%;
+    height: 320px;
+    border: 1px solid #ccc;
+    border-radius: 10px;
+  }
+
+  hr {
+    margin-top: 25px;
+  }
+
+  /* ✅ Install Button Style */
+  #installBtn {
+    display: none;
+    padding: 12px;
+    width: 100%;
+    font-size: 16px;
+    background: #1a73e8;
+    color: white;
+    border: none;
+    border-radius: 10px;
+    margin-bottom: 15px;
+    cursor: pointer;
+  }
+</style>
+</head>
+
+<body>
+
+<!-- ✅ STEP 7: INSTALL BUTTON -->
+<button id="installBtn">📲 Install Stock CAGR App</button>
+
+<div class="box">
+
+<h2>📊 Ultimate Stock CAGR + Intrinsic Value Calculator</h2>
+
+<label>Horizon (Years)</label>
+<input type="number" id="horizon" value="10" oninput="calculate()">
+
+<label>Entry P/E</label>
+<input type="number" id="entryPE" value="29" oninput="calculate()">
+
+<label>EPS Growth CAGR (%)</label>
+<input type="number" id="epsGrowth" value="15" oninput="calculate()">
+
+<label>Exit P/E</label>
+<input type="number" id="exitPE" value="27" oninput="calculate()">
+
+<hr>
+<h3>📌 Intrinsic Value Calculator</h3>
+
+<label>Current EPS</label>
+<input type="number" id="currentEPS" value="50" oninput="calculate()">
+
+<label>Current Market Price (₹)</label>
+<input type="number" id="currentPrice" value="1750" oninput="calculate()">
+
+<label>Current Market P/E</label>
+<input type="number" id="currentMarketPE" value="35" oninput="calculate()">
+
+<label>Years Forward (Projection)</label>
+<input type="number" id="yearsForward" value="9" oninput="calculate()">
+
+<div id="output" class="result">
+  Adjust inputs to calculate...
+</div>
+
+<canvas id="chart" width="900" height="320"></canvas>
+
+</div>
+
+<script>
+/* -----------------------------
+   BASE TABLE POINTS
+------------------------------*/
+const basePE = [20, 25, 35, 50, 75, 100];
+const exits10 = [18, 21, 24, 27];
+const exits20 = [12, 15, 18, 21];
+
+/* -----------------------------
+   TABLE DATA (Exact)
+------------------------------*/
+const data10 = {
+  100:{10:{18:-7,21:-6,24:-5,27:-3},15:{18:-3,21:-2,24:0,27:1},20:{18:1,21:3,24:4,27:5}},
+  75:{10:{18:-5,21:-3,24:-2,27:-1},15:{18:0,21:1,24:3,27:4},20:{18:4,21:6,24:7,27:8}},
+  50:{10:{18:-1,21:1,24:2,27:3},15:{18:4,21:5,24:7,27:8},20:{18:8,21:10,24:12,27:13}},
+  35:{10:{18:3,21:5,24:6,27:7},15:{18:8,21:9,24:11,27:12},20:{18:12,21:14,24:16,27:17}},
+  25:{10:{18:6,21:8,24:10,27:11},15:{18:11,21:13,24:15,27:16},20:{18:16,21:18,24:20,27:21}},
+  20:{10:{18:9,21:11,24:12,27:13},15:{18:14,21:16,24:17,27:19},20:{18:19,21:21,24:22,27:24}}
+};
+
+const data20 = {
+  100:{10:{12:-1,15:0,18:1,21:2},15:{12:3,15:5,18:6,21:6},20:{12:8,15:9,18:10,21:11}},
+  75:{10:{12:0,15:1,18:2,21:3},15:{12:5,15:6,18:7,21:8},20:{12:9,15:11,18:12,21:13}},
+  50:{10:{12:2,15:4,18:5,21:5},15:{12:7,15:8,18:9,21:10},20:{12:12,15:13,18:14,21:15}},
+  35:{10:{12:4,15:5,18:6,21:7},15:{12:9,15:10,18:11,21:12},20:{12:14,15:15,18:16,21:17}},
+  25:{10:{12:6,15:7,18:8,21:9},15:{12:11,15:12,18:13,21:14},20:{12:16,15:17,18:18,21:19}},
+  20:{10:{12:7,15:8,18:9,21:10},15:{12:12,15:13,18:14,21:15},20:{12:17,15:18,18:19,21:20}}
+};
+
+/* -----------------------------
+   INTERPOLATION FUNCTION
+------------------------------*/
+function interpolate(entry, eps, exit, dataset) {
+  let lower = basePE.filter(x => x <= entry).pop();
+  let upper = basePE.find(x => x >= entry);
+
+  if (!lower) lower = 20;
+  if (!upper) upper = 100;
+
+  if (lower === upper) return dataset[lower][eps][exit];
+
+  let lowVal = dataset[lower][eps][exit];
+  let upVal  = dataset[upper][eps][exit];
+
+  return lowVal + (upVal - lowVal) * ((entry - lower) / (upper - lower));
+}
+
+/* -----------------------------
+   MAIN CALCULATOR
+------------------------------*/
+function calculate() {
+
+  let horizon = parseInt(document.getElementById("horizon").value);
+  let entry   = parseFloat(document.getElementById("entryPE").value);
+  let eps     = parseInt(document.getElementById("epsGrowth").value);
+  let exit    = parseFloat(document.getElementById("exitPE").value);
+
+  let dataset  = horizon >= 15 ? data20 : data10;
+  let exitList = horizon >= 15 ? exits20 : exits10;
+
+  let nearestExit = exitList.reduce((a,b) =>
+    Math.abs(b-exit) < Math.abs(a-exit) ? b : a
+  );
+
+  let cagr = interpolate(entry, eps, nearestExit, dataset).toFixed(2);
+
+  let currentEPS   = parseFloat(document.getElementById("currentEPS").value);
+  let currentPrice = parseFloat(document.getElementById("currentPrice").value);
+  let marketPE     = parseFloat(document.getElementById("currentMarketPE").value);
+  let yearsFwd     = parseInt(document.getElementById("yearsForward").value);
+
+  let futureEPS = currentEPS * Math.pow((1 + eps/100), yearsFwd);
+  let epsGrowthPercent = ((futureEPS - currentEPS) / currentEPS) * 100;
+
+  let intrinsicPrice = futureEPS * marketPE;
+  let upsidePercent = ((intrinsicPrice - currentPrice) / currentPrice) * 100;
+
+  document.getElementById("output").innerHTML =
+    `<b>Expected Stock CAGR:</b> ${cagr}% <br>
+     (Nearest Exit P/E Used: ${nearestExit}x)<br><br>
+
+     📌 <b>Future EPS:</b> ${futureEPS.toFixed(2)}
+     (<b>+${epsGrowthPercent.toFixed(1)}%</b>)<br><br>
+
+     💰 <b>Intrinsic Future Price:</b> ₹${intrinsicPrice.toFixed(0)}
+     (<b>${upsidePercent.toFixed(1)}% Upside</b>)<br><br>
+
+     📍 <b>Current Price:</b> ₹${currentPrice.toFixed(0)}
+    `;
+
+  drawGraph(entry, eps, dataset, exitList);
+}
+
+/* -----------------------------
+   GRAPH
+------------------------------*/
+function drawGraph(entry, eps, dataset, exits) {
+  let canvas = document.getElementById("chart");
+  let ctx = canvas.getContext("2d");
+
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  let values = exits.map(x => interpolate(entry, eps, x, dataset));
+
+  ctx.beginPath();
+  ctx.moveTo(50,20);
+  ctx.lineTo(50,280);
+  ctx.lineTo(850,280);
+  ctx.stroke();
+
+  ctx.beginPath();
+  values.forEach((v,i)=>{
+    let x = 150 + i*180;
+    let y = 280 - v*10;
+    if(i===0) ctx.moveTo(x,y);
+    else ctx.lineTo(x,y);
+  });
+  ctx.stroke();
+
+  ctx.font="16px Arial";
+  exits.forEach((e,i)=>{
+    ctx.fillText(e+"x", 140+i*180, 305);
+  });
+}
+
+/* -----------------------------
+   STEP 7: INSTALL BUTTON SCRIPT
+------------------------------*/
+let deferredPrompt;
+const installBtn = document.getElementById("installBtn");
+
+window.addEventListener("beforeinstallprompt", (e) => {
+  e.preventDefault();
+  deferredPrompt = e;
+  installBtn.style.display = "block";
+
+  installBtn.addEventListener("click", () => {
+    installBtn.style.display = "none";
+    deferredPrompt.prompt();
+
+    deferredPrompt.userChoice.then((choice) => {
+      deferredPrompt = null;
+    });
+  });
+});
+
+/* -----------------------------
+   STEP 8: SERVICE WORKER REGISTER
+------------------------------*/
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("service-worker.js")
+    .then(() => console.log("✅ Service Worker Registered"))
+    .catch(err => console.log("Service Worker Error:", err));
+}
+
+/* -----------------------------
+   INITIAL RUN
+------------------------------*/
+calculate();
+</script>
+
+</body>
+</html>
